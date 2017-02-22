@@ -2,10 +2,20 @@ package renter
 
 import (
 	"io"
+	"sync"
 
 	"github.com/klauspost/reedsolomon"
 
+	"github.com/NebulousLabs/Sia/build"
 	"github.com/NebulousLabs/Sia/modules"
+)
+
+var (
+	// rsMu is a sync.Mutex that prevents mutliple erasure coding operations
+	// from running at the same time. This is because the encoding and decoding
+	// process consumes a large amount of memory. By using the lock, we can make
+	// sure that only one set is being allocated at a time.
+	rsMu sync.Mutex
 )
 
 // rsCode is a Reed-Solomon encoder/decoder. It implements the
@@ -43,6 +53,11 @@ func (rs *rsCode) Encode(data []byte, needed []uint64) ([][]byte, error) {
 		unneeded = append(unneeded, uint64(i))
 	}
 
+	// Encoding is very memory haevy, ensure that only one encode or decode
+	// operation running on the system at a time.
+	rsMu.Lock()
+	defer rsMu.Unlock()
+
 	// Get the erasure coded pieces.
 	pieces, err := rs.enc.Split(data)
 	if err != nil {
@@ -67,6 +82,11 @@ func (rs *rsCode) Encode(data []byte, needed []uint64) ([][]byte, error) {
 // Encode (length and order must be preserved), but with missing elements
 // set to nil.
 func (rs *rsCode) Recover(pieces [][]byte, n uint64, w io.Writer) error {
+	// Encoding is very memory haevy, ensure that only one encode or decode
+	// operation running on the system at a time.
+	rsMu.Lock()
+	defer rsMu.Unlock()
+
 	err := rs.enc.Reconstruct(pieces)
 	if err != nil {
 		return err
