@@ -25,9 +25,10 @@ type ErasureCoder interface {
 	// recover the original data.
 	MinPieces() int
 
-	// Encode splits data into equal-length pieces, with some pieces
-	// containing parity data.
-	Encode(data []byte) ([][]byte, error)
+	// Encode splits data into equal-length pieces, with some pieces containing
+	// parity data. 'needed' indicates which pieces are needed, vs which pieces
+	// will not be used.
+	Encode(data []byte, needed []uint64) ([][]byte, error)
 
 	// Recover recovers the original data from pieces (including parity) and
 	// writes it to w. pieces should be identical to the slice returned by

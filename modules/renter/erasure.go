@@ -26,7 +26,24 @@ func (rs *rsCode) MinPieces() int { return rs.dataPieces }
 
 // Encode splits data into equal-length pieces, some containing the original
 // data and some containing parity data.
-func (rs *rsCode) Encode(data []byte) ([][]byte, error) {
+func (rs *rsCode) Encode(data []byte, needed []uint64) ([][]byte, error) {
+	// Sanity check - missing pieces should be sorted.
+	for i := 1; build.DEBUG && i < len(needed); i++ {
+		if needed[i-1] >= needed[i] {
+			build.Critical("missing pieces array not sorted in rs.Encode")
+		}
+	}
+	// Convert the set of needed pieces into a set of unneeded pieces.
+	var unneeded []uint64
+	for i := 0; i < rs.NumPieces(); i++ {
+		if len(needed) > 0 && needed[0] == uint64(i) {
+			needed = needed[1:]
+			continue
+		}
+		unneeded = append(unneeded, uint64(i))
+	}
+
+	// Get the erasure coded pieces.
 	pieces, err := rs.enc.Split(data)
 	if err != nil {
 		return nil, err
@@ -36,6 +53,11 @@ func (rs *rsCode) Encode(data []byte) ([][]byte, error) {
 	err = rs.enc.Encode(pieces)
 	if err != nil {
 		return nil, err
+	}
+
+	// Toss the unneeded pieces and garbage collect.
+	for _, unneeded := range unneeded {
+		pieces[unneeded] = nil
 	}
 	return pieces, nil
 }
@@ -49,7 +71,11 @@ func (rs *rsCode) Recover(pieces [][]byte, n uint64, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return rs.enc.Join(w, pieces, int(n))
+	err = rs.enc.Join(w, pieces, int(n))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // NewRSCode creates a new Reed-Solomon encoder/decoder using the supplied

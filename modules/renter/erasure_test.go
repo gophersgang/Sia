@@ -3,7 +3,6 @@ package renter
 import (
 	"bytes"
 	"crypto/rand"
-	"io/ioutil"
 	"testing"
 )
 
@@ -29,15 +28,19 @@ func TestRSEncode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var needed []uint64
+	for i := 0; i < rsc.NumPieces(); i++ {
+		needed = append(needed, uint64(i))
+	}
 
 	data := make([]byte, 777)
 	rand.Read(data)
 
-	pieces, err := rsc.Encode(data)
+	pieces, err := rsc.Encode(data, needed)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = rsc.Encode(nil)
+	_, err = rsc.Encode(nil, needed)
 	if err == nil {
 		t.Fatal("expected nil data error, got nil")
 	}
@@ -58,36 +61,50 @@ func TestRSEncode(t *testing.T) {
 }
 
 func BenchmarkRSEncode(b *testing.B) {
-	rsc, err := NewRSCode(80, 20)
+	rsc, err := NewRSCode(10, 20)
 	if err != nil {
 		b.Fatal(err)
 	}
-	data := make([]byte, 1<<20)
+	var needed []uint64
+	for i := 0; i < rsc.NumPieces(); i++ {
+		needed = append(needed, uint64(i))
+	}
+	data := make([]byte, 10*1<<22)
 	rand.Read(data)
 
-	b.SetBytes(1 << 20)
+	b.SetBytes(10 * 1 << 22)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rsc.Encode(data)
+		_, err := rsc.Encode(data, needed)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
 func BenchmarkRSRecover(b *testing.B) {
-	rsc, err := NewRSCode(50, 200)
+	rsc, err := NewRSCode(10, 20)
 	if err != nil {
 		b.Fatal(err)
 	}
-	data := make([]byte, 1<<20)
+	var needed []uint64
+	for i := 20; i < rsc.NumPieces(); i++ {
+		needed = append(needed, uint64(i))
+	}
+	data := make([]byte, 10*1<<22)
 	rand.Read(data)
-	pieces, err := rsc.Encode(data)
+	pieces, err := rsc.Encode(data, needed)
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	b.SetBytes(1 << 20)
+	b.SetBytes(10 * 1 << 22)
+	buf := new(bytes.Buffer)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pieces[0] = nil
-		rsc.Recover(pieces, 1<<20, ioutil.Discard)
+		err := rsc.Recover(pieces, 10*1<<22, buf)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }
