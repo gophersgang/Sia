@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -304,6 +305,16 @@ func startDaemonCmd(cmd *cobra.Command, _ []string) {
 	if globalConfig.Siad.Profile || build.DEBUG {
 		go profile.StartContinuousProfile(globalConfig.Siad.ProfileDir)
 	}
+
+	// Establish a loop that will clear memory every 30 seconds. This will help
+	// keep 'siad' as lightweight as possible. Can be removed once peak usage is
+	// below 1 GiB.
+	go func() {
+		for {
+			debug.FreeOSMemory()
+			time.Sleep(time.Second * 30)
+		}
+	}()
 
 	// Start siad. startDaemon will only return when it is shutting down.
 	err := startDaemon(globalConfig)
